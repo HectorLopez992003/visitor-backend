@@ -3,18 +3,22 @@ import Visitor from "../models/Visitor.js";
 
 const router = express.Router();
 
-// GET all visitors
+/**
+ * GET ALL VISITORS
+ */
 router.get("/", async (req, res) => {
   try {
     const visitors = await Visitor.find().sort({ createdAt: -1 });
     res.json(visitors);
   } catch (err) {
-    console.error("Failed to fetch visitors:", err);
+    console.error("❌ Failed to fetch visitors:", err);
     res.status(500).json({ error: "Failed to fetch visitors" });
   }
 });
 
-// POST a new visitor (WITH ANOMALY DETECTION)
+/**
+ * CREATE VISITOR (WITH ANOMALY CHECK)
+ */
 router.post("/", async (req, res) => {
   try {
     const { visitorID } = req.body;
@@ -23,10 +27,10 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "visitorID is required" });
     }
 
-    // 🔴 BLOCK if visitor is still inside (no timeOut yet)
+    // 🔴 BLOCK if visitor still inside
     const activeVisitor = await Visitor.findOne({
       visitorID,
-      timeOut: { $exists: false },
+      timeOut: null,
     });
 
     if (activeVisitor) {
@@ -35,16 +39,16 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // 🔴 BLOCK multiple registrations on the same day
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    // 🔴 BLOCK multiple registrations in same calendar day
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
 
     const todayVisitor = await Visitor.findOne({
       visitorID,
-      createdAt: { $gte: startOfDay, $lte: endOfDay },
+      createdAt: { $gte: today, $lt: tomorrow },
     });
 
     if (todayVisitor) {
@@ -53,18 +57,19 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // ✅ Save visitor if no anomaly detected
     const newVisitor = new Visitor(req.body);
     const saved = await newVisitor.save();
 
     res.status(201).json(saved);
   } catch (err) {
-    console.error("Failed to save visitor:", err);
+    console.error("❌ Failed to save visitor:", err);
     res.status(500).json({ error: "Failed to save visitor" });
   }
 });
 
-// TIME IN
+/**
+ * TIME IN
+ */
 router.put("/:id/time-in", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(
@@ -78,7 +83,9 @@ router.put("/:id/time-in", async (req, res) => {
   }
 });
 
-// TIME OUT
+/**
+ * TIME OUT
+ */
 router.put("/:id/time-out", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(
@@ -92,7 +99,9 @@ router.put("/:id/time-out", async (req, res) => {
   }
 });
 
-// START PROCESSING
+/**
+ * START PROCESSING
+ */
 router.put("/:id/start-processing", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(
@@ -106,12 +115,17 @@ router.put("/:id/start-processing", async (req, res) => {
   }
 });
 
-// MARK PROCESSED
+/**
+ * MARK AS PROCESSED
+ */
 router.put("/:id/office-processed", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(
       req.params.id,
-      { officeProcessedTime: new Date(), processed: true },
+      {
+        officeProcessedTime: new Date(),
+        processed: true,
+      },
       { new: true }
     );
     res.json(visitor);
