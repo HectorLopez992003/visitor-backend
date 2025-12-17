@@ -8,8 +8,7 @@ router.get("/", async (req, res) => {
   try {
     const visitors = await Visitor.find().sort({ createdAt: -1 });
     res.json(visitors);
-  } catch (err) {
-    console.error("❌ Failed to fetch visitors:", err);
+  } catch {
     res.status(500).json({ error: "Failed to fetch visitors" });
   }
 });
@@ -18,32 +17,18 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const { visitorID } = req.body;
-    if (!visitorID) return res.status(400).json({ error: "visitorID is required" });
+    if (!visitorID) {
+      return res.status(400).json({ error: "visitorID is required" });
+    }
 
-    // Block if visitor still inside
     const activeVisitor = await Visitor.findOne({ visitorID, timeOut: null });
-    if (activeVisitor)
-      return res.status(409).json({ error: "Visitor already registered and not yet timed out." });
+    if (activeVisitor) {
+      return res.status(409).json({ error: "Visitor already inside" });
+    }
 
-    // Block multiple registrations in same day
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-
-    const todayVisitor = await Visitor.findOne({
-      visitorID,
-      createdAt: { $gte: today, $lt: tomorrow },
-    });
-    if (todayVisitor)
-      return res.status(409).json({ error: "Visitor already registered today." });
-
-    const newVisitor = new Visitor(req.body);
-    const saved = await newVisitor.save();
-
-    res.status(201).json(saved);
-  } catch (err) {
-    console.error("❌ Failed to save visitor:", err);
+    const visitor = await Visitor.create(req.body);
+    res.status(201).json(visitor);
+  } catch {
     res.status(500).json({ error: "Failed to save visitor" });
   }
 });
@@ -57,8 +42,8 @@ router.put("/:id/time-in", async (req, res) => {
       { new: true }
     );
     res.json(visitor);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to set time in" });
+  } catch {
+    res.status(500).json({ error: "Failed to time in" });
   }
 });
 
@@ -71,8 +56,8 @@ router.put("/:id/time-out", async (req, res) => {
       { new: true }
     );
     res.json(visitor);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to set time out" });
+  } catch {
+    res.status(500).json({ error: "Failed to time out" });
   }
 });
 
@@ -85,12 +70,12 @@ router.put("/:id/start-processing", async (req, res) => {
       { new: true }
     );
     res.json(visitor);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Failed to start processing" });
   }
 });
 
-/** MARK AS PROCESSED */
+/** MARK PROCESSED */
 router.put("/:id/office-processed", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(
@@ -99,22 +84,18 @@ router.put("/:id/office-processed", async (req, res) => {
       { new: true }
     );
     res.json(visitor);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to mark as processed" });
+  } catch {
+    res.status(500).json({ error: "Failed to process visitor" });
   }
 });
 
-/** DELETE VISITOR (FIXED) */
+/** DELETE VISITOR */
 router.delete("/:id", async (req, res) => {
   try {
-    const deletedVisitor = await Visitor.findByIdAndDelete(req.params.id);
-    if (!deletedVisitor) {
-      return res.status(404).json({ error: "Visitor not found" });
-    }
+    await Visitor.findByIdAndDelete(req.params.id);
     res.json({ message: "Visitor deleted successfully" });
-  } catch (err) {
-    console.error("❌ Failed to delete visitor:", err);
-    res.status(500).json({ error: err.message || "Failed to delete visitor" });
+  } catch {
+    res.status(500).json({ error: "Failed to delete visitor" });
   }
 });
 

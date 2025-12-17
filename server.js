@@ -12,18 +12,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// MongoDB
+// MongoDB connection
 mongoose
   .connect(process.env.MONGODB_URI)
-  .then(() => console.log("✅ MongoDB connected"))
-  .catch(err => console.error("❌ MongoDB error:", err));
+  .then(() => console.log("✅ MongoDB connected successfully"))
+  .catch(err => console.error("❌ MongoDB connection error:", err));
 
 // Routes
 app.use("/api/visitors", visitorRoutes);
 
-// Root
+// Root test route
 app.get("/", (req, res) => {
-  res.send("Visitor Management Backend is running");
+  res.json({ message: "Visitor Management Backend is running" });
 });
 
-export default app; // ✅ REQUIRED BY VERCEL
+export default app; // REQUIRED for Vercel

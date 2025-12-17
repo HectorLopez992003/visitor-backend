@@ -2,27 +2,25 @@ import mongoose from "mongoose";
 
 const visitorSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
-    visitorID: { type: String, required: true },
-    office: { type: String, required: true },
-    purpose: { type: String, required: true },
+    name: String,
+    visitorID: String,
+    office: String,
+    purpose: String,
 
-    qrData: String,
-    idFile: String,
-
-    scheduledDate: String,
+    scheduledDate: Date,
     scheduledTime: String,
 
-    timeIn: { type: Date, default: null },
-    timeOut: { type: Date, default: null },
+    timeIn: Date,
+    timeOut: Date,
 
     processingStartedTime: Date,
     officeProcessedTime: Date,
 
     processed: { type: Boolean, default: false },
+
+    idFile: String
   },
   { timestamps: true }
 );
 
-// Explicitly specify the collection name
-export default mongoose.model("Visitor", visitorSchema, "visitors");
+export default mongoose.model("Visitor", visitorSchema);
