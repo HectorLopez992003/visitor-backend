@@ -3,9 +3,7 @@ import Visitor from "../models/Visitor.js";
 
 const router = express.Router();
 
-/**
- * GET ALL VISITORS
- */
+/** GET ALL VISITORS */
 router.get("/", async (req, res) => {
   try {
     const visitors = await Visitor.find().sort({ createdAt: -1 });
@@ -16,33 +14,20 @@ router.get("/", async (req, res) => {
   }
 });
 
-/**
- * CREATE VISITOR (WITH ANOMALY CHECK)
- */
+/** CREATE VISITOR */
 router.post("/", async (req, res) => {
   try {
     const { visitorID } = req.body;
+    if (!visitorID) return res.status(400).json({ error: "visitorID is required" });
 
-    if (!visitorID) {
-      return res.status(400).json({ error: "visitorID is required" });
-    }
+    // Block if visitor still inside
+    const activeVisitor = await Visitor.findOne({ visitorID, timeOut: null });
+    if (activeVisitor)
+      return res.status(409).json({ error: "Visitor already registered and not yet timed out." });
 
-    // 🔴 BLOCK if visitor still inside
-    const activeVisitor = await Visitor.findOne({
-      visitorID,
-      timeOut: null,
-    });
-
-    if (activeVisitor) {
-      return res.status(409).json({
-        error: "Visitor already registered and not yet timed out.",
-      });
-    }
-
-    // 🔴 BLOCK multiple registrations in same calendar day
+    // Block multiple registrations in same day
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
 
@@ -50,12 +35,8 @@ router.post("/", async (req, res) => {
       visitorID,
       createdAt: { $gte: today, $lt: tomorrow },
     });
-
-    if (todayVisitor) {
-      return res.status(409).json({
-        error: "Visitor already registered today.",
-      });
-    }
+    if (todayVisitor)
+      return res.status(409).json({ error: "Visitor already registered today." });
 
     const newVisitor = new Visitor(req.body);
     const saved = await newVisitor.save();
@@ -67,9 +48,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-/**
- * TIME IN
- */
+/** TIME IN */
 router.put("/:id/time-in", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(
@@ -83,9 +62,7 @@ router.put("/:id/time-in", async (req, res) => {
   }
 });
 
-/**
- * TIME OUT
- */
+/** TIME OUT */
 router.put("/:id/time-out", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(
@@ -99,9 +76,7 @@ router.put("/:id/time-out", async (req, res) => {
   }
 });
 
-/**
- * START PROCESSING
- */
+/** START PROCESSING */
 router.put("/:id/start-processing", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(
@@ -115,22 +90,31 @@ router.put("/:id/start-processing", async (req, res) => {
   }
 });
 
-/**
- * MARK AS PROCESSED
- */
+/** MARK AS PROCESSED */
 router.put("/:id/office-processed", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(
       req.params.id,
-      {
-        officeProcessedTime: new Date(),
-        processed: true,
-      },
+      { officeProcessedTime: new Date(), processed: true },
       { new: true }
     );
     res.json(visitor);
   } catch (err) {
     res.status(500).json({ error: "Failed to mark as processed" });
+  }
+});
+
+/** DELETE VISITOR (FIXED) */
+router.delete("/:id", async (req, res) => {
+  try {
+    const deletedVisitor = await Visitor.findByIdAndDelete(req.params.id);
+    if (!deletedVisitor) {
+      return res.status(404).json({ error: "Visitor not found" });
+    }
+    res.json({ message: "Visitor deleted successfully" });
+  } catch (err) {
+    console.error("❌ Failed to delete visitor:", err);
+    res.status(500).json({ error: err.message || "Failed to delete visitor" });
   }
 });
 

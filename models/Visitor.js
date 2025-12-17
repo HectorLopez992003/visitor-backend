@@ -24,4 +24,5 @@ const visitorSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-export default mongoose.model("Visitor", visitorSchema);
+// Explicitly specify the collection name
+export default mongoose.model("Visitor", visitorSchema, "visitors");
