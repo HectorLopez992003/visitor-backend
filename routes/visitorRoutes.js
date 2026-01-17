@@ -15,7 +15,7 @@ router.get("/", async (req, res) => {
       {
         name: 1,
         contactNumber: 1,
-        email: 1, // ✅ REQUIRED
+        email: 1,
         office: 1,
         purpose: 1,
         scheduledDate: 1,
@@ -26,7 +26,8 @@ router.get("/", async (req, res) => {
         officeProcessedTime: 1,
         processed: 1,
         overdueEmailSent: 1,
-        overdueSmsSent: 1
+        overdueSmsSent: 1,
+        idFile: 1 // ✅ Add this
       }
     ).sort({ createdAt: -1 });
 
