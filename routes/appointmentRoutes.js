@@ -1,6 +1,7 @@
 import express from "express";
 import Appointment from "../models/Appointment.js";
 import Visitor from "../models/Visitor.js";
+import { sendEmail } from "../utils/email.js"; // ✅ Email helper
 
 const router = express.Router();
 
@@ -21,8 +22,24 @@ const markOverdueAppointments = async () => {
     if (now > sched) {
       await Visitor.updateOne(
         { contactNumber: appt.contactNumber },
-        { /* no need to store status, FE reads virtual */ }
+        { /* FE reads virtual status, no DB update needed */ }
       );
+
+      // ✅ Send automatic overdue email if email exists and not sent
+      if (appt.email && !appt.overdueEmailSent) {
+        try {
+          await sendEmail(
+            appt.email,
+            "Overdue Appointment Notification",
+            `Hello ${appt.name}, your scheduled appointment is now overdue. Please return to the guard.`
+          );
+          appt.overdueEmailSent = true;
+          await appt.save();
+          console.log(`📧 Overdue email sent to ${appt.email}`);
+        } catch (emailErr) {
+          console.error(`❌ Failed to send email to ${appt.email}:`, emailErr);
+        }
+      }
     }
   }
 };
@@ -64,15 +81,31 @@ router.get("/:contactNumber", async (req, res) => {
   }
 });
 
-// CREATE new appointment
+// CREATE new appointment with anomaly detection
 router.post("/", async (req, res) => {
   try {
-    const { name, contactNumber, office, purpose, scheduledDate, scheduledTime, idFile } = req.body;
+    const { name, contactNumber, email, office, purpose, scheduledDate, scheduledTime, idFile } = req.body;
+
+    // ✅ Validate required fields
+    if (!name || !contactNumber || !email || !office || !purpose || !scheduledDate || !scheduledTime) {
+      return res.status(400).json({ error: "All fields including email are required" });
+    }
+
+    // --------- ANOMALY DETECTION ----------
+    const existingAppointment = await Appointment.findOne({ contactNumber, scheduledDate, scheduledTime });
+    const existingVisitor = await Visitor.findOne({ contactNumber, scheduledDate, scheduledTime });
+    if (existingAppointment || existingVisitor) {
+      return res.status(409).json({ error: "Duplicate appointment detected for this date and time." });
+    }
+    // -------------------------------------
+
     const qrData = JSON.stringify({ contactNumber, name });
 
+    // ✅ Create Appointment
     const appointment = await Appointment.create({
       name,
       contactNumber,
+      email, // store email
       office,
       purpose,
       scheduledDate,
@@ -81,21 +114,29 @@ router.post("/", async (req, res) => {
       qrData
     });
 
-    await Visitor.create({
-      name,
-      contactNumber,
-      office,
-      purpose,
-      scheduledDate,
-      scheduledTime,
-      idFile,
-      registrationType: "ONLINE",
-      qrData
-    });
+    // ✅ Create Visitor from Appointment
+    try {
+      await Visitor.create({
+        name,
+        contactNumber,
+        email, // make sure this exists
+        office,
+        purpose,
+        scheduledDate,
+        scheduledTime,
+        idFile,
+        registrationType: "ONLINE",
+        qrData
+      });
+    } catch (visitorErr) {
+      console.error("❌ Visitor creation failed:", visitorErr);
+      return res.status(500).json({ error: "Failed to create visitor" });
+    }
 
     res.status(201).json({ message: "Saved", appointment });
+
   } catch (err) {
-    console.error(err);
+    console.error("❌ Failed to save appointment:", err);
     res.status(500).json({ error: "Failed to save appointment" });
   }
 });

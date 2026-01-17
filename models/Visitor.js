@@ -5,6 +5,7 @@ const visitorSchema = new mongoose.Schema(
     // BASIC INFO
     name: String,
     contactNumber: String,
+    email: String, // ✅ Added email
     office: String,
     purpose: String,
 
@@ -39,7 +40,17 @@ const visitorSchema = new mongoose.Schema(
       default: ""
     },
 
-    qrData: String
+    qrData: String,
+
+    // 🔔 NOTIFICATIONS
+    overdueSmsSent: {
+      type: Boolean,
+      default: false
+    },
+    overdueEmailSent: { // ✅ Added email notification flag
+      type: Boolean,
+      default: false
+    }
   },
   { timestamps: true }
 );
@@ -56,7 +67,8 @@ visitorSchema.virtual("status").get(function () {
     const [h, m] = this.scheduledTime.split(":").map(Number);
     sched.setHours(h, m, 0, 0);
 
-    if (now > sched && !this.officeProcessedTime && !this.processingStartedTime) return "OVERDUE";
+    if (now > sched && !this.officeProcessedTime && !this.processingStartedTime)
+      return "OVERDUE";
   }
 
   return "PENDING";

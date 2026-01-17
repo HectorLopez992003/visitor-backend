@@ -1,6 +1,7 @@
 import express from "express";
 import Visitor from "../models/Visitor.js";
 import Appointment from "../models/Appointment.js";
+import { sendEmail } from "../utils/email.js"; 
 
 const router = express.Router();
 
@@ -9,7 +10,26 @@ const router = express.Router();
 ========================= */
 router.get("/", async (req, res) => {
   try {
-    const visitors = await Visitor.find().sort({ createdAt: -1 });
+    const visitors = await Visitor.find(
+      {},
+      {
+        name: 1,
+        contactNumber: 1,
+        email: 1, // ✅ REQUIRED
+        office: 1,
+        purpose: 1,
+        scheduledDate: 1,
+        scheduledTime: 1,
+        timeIn: 1,
+        timeOut: 1,
+        processingStartedTime: 1,
+        officeProcessedTime: 1,
+        processed: 1,
+        overdueEmailSent: 1,
+        overdueSmsSent: 1
+      }
+    ).sort({ createdAt: -1 });
+
     res.json(visitors);
   } catch (err) {
     console.error("❌ Failed to fetch visitors:", err);
@@ -24,6 +44,7 @@ router.post("/", async (req, res) => {
   try {
     const {
       contactNumber,
+      email,
       name,
       office,
       purpose,
@@ -38,26 +59,26 @@ router.post("/", async (req, res) => {
     if (!contactNumber) return res.status(400).json({ error: "Contact number is required" });
     if (!name || !office || !purpose) return res.status(400).json({ error: "Missing required fields" });
 
+    // --------- ANOMALY DETECTION ----------
+    const existing = await Visitor.findOne({
+      contactNumber,
+      scheduledDate,
+      scheduledTime
+    });
+    if (existing) {
+      return res.status(409).json({ error: "Duplicate visitor detected for this date and time." });
+    }
+    // -------------------------------------
+
     // Check if visitor is already inside
     const activeVisitor = await Visitor.findOne({ contactNumber, timeOut: null });
     if (activeVisitor) return res.status(409).json({ error: "Visitor already inside" });
-
-    // Check if visitor is already registered today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-
-    const todayVisitor = await Visitor.findOne({
-      contactNumber,
-      createdAt: { $gte: today, $lt: tomorrow },
-    });
-    if (todayVisitor) return res.status(409).json({ error: "Visitor already registered today" });
 
     // Create visitor
     const visitor = await Visitor.create({
       name,
       contactNumber,
+      email, // ✅ store email
       office,
       purpose,
       scheduledDate: scheduledDate || null,
@@ -134,6 +155,50 @@ router.delete("/:id", async (req, res) => {
   } catch (err) {
     console.error("❌ Failed to delete visitor:", err);
     res.status(500).json({ error: "Failed to delete visitor" });
+  }
+});
+
+router.post("/:id/send-overdue-email", async (req, res) => {
+  try {
+    const visitor = await Visitor.findById(req.params.id);
+    if (!visitor) return res.status(404).json({ success: false, message: "Visitor not found" });
+
+    if (!visitor.email) {
+      return res.status(400).json({ success: false, message: "Visitor does not have an email" });
+    }
+
+    if (visitor.overdueEmailSent) {
+      return res.json({ success: false, message: "Email already sent" });
+    }
+
+    if (!visitor.officeProcessedTime || visitor.timeOut) {
+      return res.json({ success: false, message: "Visitor is not overdue" });
+    }
+
+    const now = Date.now();
+    const processedTime = new Date(visitor.officeProcessedTime).getTime();
+    if (now - processedTime < 30 * 60 * 1000) {
+      return res.json({ success: false, message: "Visitor is not yet overdue" });
+    }
+
+    // Send email
+    const emailResult = await sendEmail(
+      visitor.email,
+      "Overdue Visitor Notification",
+      `Hello ${visitor.name}, you exceeded 30 mins after office processing. Please return to the guard for timeout.`
+    );
+
+    if (!emailResult.success) {
+      return res.status(500).json({ success: false, message: emailResult.error });
+    }
+
+    visitor.overdueEmailSent = true;
+    await visitor.save();
+
+    return res.json({ success: true, message: "Email sent successfully" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 });
 

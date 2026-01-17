@@ -4,6 +4,7 @@ const appointmentSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     contactNumber: { type: String, required: true },
+    email: { type: String, required: false }, // ✅ Added email
     office: { type: String, required: true },
     purpose: { type: String, required: true },
     scheduledDate: { type: Date, required: true },
@@ -17,7 +18,13 @@ const appointmentSchema = new mongoose.Schema(
     timeOut: Date,
     processed: { type: Boolean, default: false },
 
-    feedback: { type: String, default: "" }
+    feedback: { type: String, default: "" },
+
+    // 🔔 Email notification flag
+    overdueEmailSent: { 
+      type: Boolean, 
+      default: false 
+    }
   },
   { timestamps: true }
 );
@@ -34,7 +41,8 @@ appointmentSchema.virtual("status").get(function () {
     const [h, m] = this.scheduledTime.split(":").map(Number);
     sched.setHours(h, m, 0, 0);
 
-    if (now > sched && !this.officeProcessedTime && !this.processingStartedTime) return "OVERDUE";
+    if (now > sched && !this.officeProcessedTime && !this.processingStartedTime)
+      return "OVERDUE";
   }
 
   return "PENDING";
