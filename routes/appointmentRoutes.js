@@ -91,13 +91,29 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "All fields including email are required" });
     }
 
-    // --------- ANOMALY DETECTION ----------
-    const existingAppointment = await Appointment.findOne({ contactNumber, scheduledDate, scheduledTime });
-    const existingVisitor = await Visitor.findOne({ contactNumber, scheduledDate, scheduledTime });
-    if (existingAppointment || existingVisitor) {
-      return res.status(409).json({ error: "Duplicate appointment detected for this date and time." });
-    }
-    // -------------------------------------
+// --------- UPDATED ANOMALY DETECTION: max 2 per day ----------
+const startOfDay = new Date(scheduledDate);
+startOfDay.setHours(0, 0, 0, 0);
+
+const endOfDay = new Date(scheduledDate);
+endOfDay.setHours(23, 59, 59, 999);
+
+// Count appointments + visitors for the same number on the same day
+const appointmentCount = await Appointment.countDocuments({
+  contactNumber,
+  scheduledDate: { $gte: startOfDay, $lte: endOfDay }
+});
+const visitorCount = await Visitor.countDocuments({
+  contactNumber,
+  scheduledDate: { $gte: startOfDay, $lte: endOfDay }
+});
+
+if (appointmentCount + visitorCount >= 2) {
+  return res.status(409).json({
+    error: "Maximum 2 registrations allowed per day for this number"
+  });
+}
+// -------------------------------------
 
     const qrData = JSON.stringify({ contactNumber, name });
 

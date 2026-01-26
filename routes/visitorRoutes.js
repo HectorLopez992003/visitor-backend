@@ -60,16 +60,29 @@ router.post("/", async (req, res) => {
     if (!contactNumber) return res.status(400).json({ error: "Contact number is required" });
     if (!name || !office || !purpose) return res.status(400).json({ error: "Missing required fields" });
 
-    // --------- ANOMALY DETECTION ----------
-    const existing = await Visitor.findOne({
-      contactNumber,
-      scheduledDate,
-      scheduledTime
-    });
-    if (existing) {
-      return res.status(409).json({ error: "Duplicate visitor detected for this date and time." });
-    }
-    // -------------------------------------
+// --------- UPDATED ANOMALY DETECTION: max 2 per day ----------
+const startOfDay = new Date(scheduledDate);
+startOfDay.setHours(0, 0, 0, 0);
+
+const endOfDay = new Date(scheduledDate);
+endOfDay.setHours(23, 59, 59, 999);
+
+// Count appointments + visitors for the same number on the same day
+const appointmentCount = await Appointment.countDocuments({
+  contactNumber,
+  scheduledDate: { $gte: startOfDay, $lte: endOfDay }
+});
+const visitorCount = await Visitor.countDocuments({
+  contactNumber,
+  scheduledDate: { $gte: startOfDay, $lte: endOfDay }
+});
+
+if (appointmentCount + visitorCount >= 2) {
+  return res.status(409).json({
+    error: "Maximum 2 registrations allowed per day for this number"
+  });
+}
+// -------------------------------------
 
     // Check if visitor is already inside
     const activeVisitor = await Visitor.findOne({ contactNumber, timeOut: null });
