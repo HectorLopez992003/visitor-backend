@@ -203,4 +203,24 @@ router.post("/:id/send-overdue-email", async (req, res) => {
   }
 });
 
+// 🔎 DEBUG: Test email
+router.get("/debug/test-email", async (req, res) => {
+  try {
+    const result = await sendEmail(
+      "hectorjoshlopez@gmail.com", // send to yourself
+      "Test Email from Visitor System",
+      "If you received this, SMTP is working correctly."
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ success: false, error: result.error });
+    }
+
+    res.json({ success: true, message: "Test email sent", result });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 export default router;

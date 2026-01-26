@@ -9,9 +9,14 @@ import appointmentRoutes from "./routes/appointmentRoutes.js";
 import suggestionRoutes from "./routes/suggestionRoutes.js";
 
 import Visitor from "./models/Visitor.js";
+import Appointment from "./models/Appointment.js";
 import { sendEmail } from "./utils/email.js"; // ✅ Email helper
+import { sendOverdueEmail } from "./utils/overdue.js"; // ✅ New helper
 
 dotenv.config();
+
+console.log("SMTP_USER:", process.env.SMTP_USER);
+console.log("SMTP_PASS:", process.env.SMTP_PASS ? "✅ LOADED" : "❌ MISSING");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -49,49 +54,50 @@ app.get("/", (req, res) => {
 /* ======================
    AUTOMATIC OVERDUE EMAIL CHECK (REAL-TIME)
 ====================== */
-const checkOverdueVisitors = async () => {
+const checkOverdueVisitorsAndAppointments = async () => {
   try {
     const now = new Date();
 
-    // Find visitors that finished processing but haven't timed out and no email sent yet
+    /* --------------------
+       WALK-IN VISITORS
+    -------------------- */
     const overdueVisitors = await Visitor.find({
       officeProcessedTime: { $ne: null },
       timeOut: null,
       overdueEmailSent: false,
+      email: { $ne: null },
     });
 
     for (const visitor of overdueVisitors) {
-      const processedTime = new Date(visitor.officeProcessedTime).getTime();
-      const nowTime = now.getTime();
+      if (now.getTime() - new Date(visitor.officeProcessedTime).getTime() >= 30 * 60 * 1000) {
+        await sendOverdueEmail(visitor, "visitor");
+      }
+    }
 
-      // ✅ Send email if 30+ mins passed
-      if (nowTime - processedTime >= 30 * 60 * 1000 && visitor.email) {
-        try {
-          await sendEmail(
-            visitor.email,
-            "Overdue Visitor Notification",
-            `Hello ${visitor.name}, you exceeded 30 mins after office processing. Please return to the guard.`
-          );
+    /* --------------------
+       ONLINE APPOINTMENTS
+    -------------------- */
+    const overdueAppointments = await Appointment.find({
+      officeProcessedTime: { $ne: null },
+      processed: true,          // ✅ Fix: use processed instead of timeOut
+      overdueEmailSent: false,
+      email: { $ne: null },
+    });
 
-          visitor.overdueEmailSent = true;
-          await visitor.save();
-          console.log(`📧 Overdue email sent to ${visitor.email}`);
-        } catch (emailErr) {
-          console.error(`❌ Failed to send email to ${visitor.email}:`, emailErr);
-        }
+    for (const appt of overdueAppointments) {
+      if (now.getTime() - new Date(appt.officeProcessedTime).getTime() >= 30 * 60 * 1000) {
+        await sendOverdueEmail(appt, "appointment");
       }
     }
   } catch (err) {
-    console.error("❌ Error checking overdue visitors:", err);
+    console.error("❌ Error checking overdue visitors/appointments:", err);
   }
 };
 
-// Run every 1 minute for more "real-time" email
-setInterval(checkOverdueVisitors, 1 * 60 * 1000);
+// Run every 1 minute
+setInterval(checkOverdueVisitorsAndAppointments, 1 * 60 * 1000);
 
 /* ======================
    SERVER
 ====================== */
-app.listen(PORT, () =>
-  console.log(`🚀 Server running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

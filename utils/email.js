@@ -1,28 +1,34 @@
 import nodemailer from "nodemailer";
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,     // smtp.gmail.com
-  port: process.env.SMTP_PORT,     // 587 for TLS
-  secure: false,                   // false for TLS
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
   auth: {
-    user: process.env.SMTP_USER,   // your Gmail
-    pass: process.env.SMTP_PASS,   // app password
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false,
   },
 });
 
 export const sendEmail = async (to, subject, text) => {
   try {
+    console.log("📨 Sending email to:", to);
+    console.log("📡 Using SMTP:", "smtp.gmail.com:587");
+
     const info = await transporter.sendMail({
-      from: process.env.SMTP_USER,  // sender address
-      to,                           // recipient
-      subject,                      // subject line
-      text,                         // plain text body
+      from: `"Visitor System" <${process.env.SMTP_USER}>`,
+      to,
+      subject,
+      text,
     });
 
     console.log("📧 Email sent:", info.messageId);
     return { success: true, messageId: info.messageId };
   } catch (err) {
-    console.error("❌ Email error:", err);
+    console.error("❌ Email error FULL:", err);
     return { success: false, error: err.message };
   }
 };
