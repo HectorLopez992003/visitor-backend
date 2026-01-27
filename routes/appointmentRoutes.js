@@ -216,15 +216,7 @@ router.put("/:id/accept", async (req, res) => {
     if (visitor) {
       visitor.accepted = true;
       await visitor.save();
-
-      // ✅ Send email automatically
-      if (visitor.email) {
-        await sendEmail(
-          visitor.email,
-          "Visitor Accepted",
-          `Hello ${visitor.name}, your registration has been accepted. You may now enter the premises.`
-        );
-      }
+      // ✅ removed duplicate email sending
     }
 
     res.json({ message: "Appointment accepted", appointment });
@@ -248,15 +240,7 @@ router.put("/:id/decline", async (req, res) => {
     if (visitor) {
       visitor.accepted = false;
       await visitor.save();
-
-      // ✅ Send email automatically
-      if (visitor.email) {
-        await sendEmail(
-          visitor.email,
-          "Visitor Declined",
-          `Hello ${visitor.name}, unfortunately your registration has been declined. Please contact the office for more info.`
-        );
-      }
+      // ✅ removed duplicate email sending
     }
 
     res.json({ message: "Appointment declined", appointment });
