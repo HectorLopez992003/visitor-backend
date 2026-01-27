@@ -50,6 +50,12 @@ const visitorSchema = new mongoose.Schema(
     overdueEmailSent: { // ✅ Added email notification flag
       type: Boolean,
       default: false
+    },
+
+    // ✅ ACCEPT / DECLINE STATUS
+    accepted: {
+      type: Boolean,
+      default: null // null = pending, true = accepted, false = declined
     }
   },
   { timestamps: true }

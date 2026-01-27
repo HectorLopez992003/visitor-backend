@@ -27,7 +27,8 @@ router.get("/", async (req, res) => {
         processed: 1,
         overdueEmailSent: 1,
         overdueSmsSent: 1,
-        idFile: 1 // ✅ Add this
+        accepted: 1, // ✅ added accepted field
+        idFile: 1 
       }
     ).sort({ createdAt: -1 });
 
@@ -60,29 +61,28 @@ router.post("/", async (req, res) => {
     if (!contactNumber) return res.status(400).json({ error: "Contact number is required" });
     if (!name || !office || !purpose) return res.status(400).json({ error: "Missing required fields" });
 
-// --------- UPDATED ANOMALY DETECTION: max 2 per day ----------
-const startOfDay = new Date(scheduledDate);
-startOfDay.setHours(0, 0, 0, 0);
+    // --------- UPDATED ANOMALY DETECTION: max 2 per day ----------
+    const startOfDay = new Date(scheduledDate);
+    startOfDay.setHours(0, 0, 0, 0);
 
-const endOfDay = new Date(scheduledDate);
-endOfDay.setHours(23, 59, 59, 999);
+    const endOfDay = new Date(scheduledDate);
+    endOfDay.setHours(23, 59, 59, 999);
 
-// Count appointments + visitors for the same number on the same day
-const appointmentCount = await Appointment.countDocuments({
-  contactNumber,
-  scheduledDate: { $gte: startOfDay, $lte: endOfDay }
-});
-const visitorCount = await Visitor.countDocuments({
-  contactNumber,
-  scheduledDate: { $gte: startOfDay, $lte: endOfDay }
-});
+    const appointmentCount = await Appointment.countDocuments({
+      contactNumber,
+      scheduledDate: { $gte: startOfDay, $lte: endOfDay }
+    });
+    const visitorCount = await Visitor.countDocuments({
+      contactNumber,
+      scheduledDate: { $gte: startOfDay, $lte: endOfDay }
+    });
 
-if (appointmentCount + visitorCount >= 2) {
-  return res.status(409).json({
-    error: "Maximum 2 registrations allowed per day for this number"
-  });
-}
-// -------------------------------------
+    if (appointmentCount + visitorCount >= 2) {
+      return res.status(409).json({
+        error: "Maximum 2 registrations allowed per day for this number"
+      });
+    }
+    // -------------------------------------
 
     // Check if visitor is already inside
     const activeVisitor = await Visitor.findOne({ contactNumber, timeOut: null });
@@ -92,7 +92,7 @@ if (appointmentCount + visitorCount >= 2) {
     const visitor = await Visitor.create({
       name,
       contactNumber,
-      email, // ✅ store email
+      email,
       office,
       purpose,
       scheduledDate: scheduledDate || null,
@@ -100,6 +100,7 @@ if (appointmentCount + visitorCount >= 2) {
       idFile: idFile || null,
       registrationType: registrationType || "ONLINE",
       qrData: qrData || null,
+      accepted: null // pending by default
     });
 
     res.status(201).json(visitor);
@@ -117,13 +118,19 @@ const updateVisitor = async (id, updateFields, res, action) => {
     const visitor = await Visitor.findByIdAndUpdate(id, updateFields, { new: true });
     if (!visitor) return res.status(404).json({ error: "Visitor not found" });
 
-    // Sync with Appointment if exists
+    // Sync only relevant Appointment fields if it exists
     const appointment = await Appointment.findOne({ contactNumber: visitor.contactNumber });
     if (appointment) {
-      Object.assign(appointment, updateFields);
-      if (updateFields.processingStartedTime) appointment.status = "PROCESSING";
-      if (updateFields.officeProcessedTime) appointment.status = "PROCESSED";
-      await appointment.save();
+      const fieldsToUpdate = {};
+      if (updateFields.processingStartedTime) fieldsToUpdate.processingStartedTime = updateFields.processingStartedTime;
+      if (updateFields.officeProcessedTime) fieldsToUpdate.officeProcessedTime = updateFields.officeProcessedTime;
+      if (updateFields.feedback) fieldsToUpdate.feedback = updateFields.feedback;
+      if (typeof updateFields.accepted === "boolean") fieldsToUpdate.accepted = updateFields.accepted;
+
+      if (Object.keys(fieldsToUpdate).length > 0) {
+        Object.assign(appointment, fieldsToUpdate);
+        await appointment.save();
+      }
     }
 
     res.json(visitor);
@@ -172,6 +179,9 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
+/** =========================
+ * SEND OVERDUE EMAIL
+========================= */
 router.post("/:id/send-overdue-email", async (req, res) => {
   try {
     const visitor = await Visitor.findById(req.params.id);
@@ -216,11 +226,86 @@ router.post("/:id/send-overdue-email", async (req, res) => {
   }
 });
 
-// 🔎 DEBUG: Test email
+/** =========================
+ * ACCEPT / DECLINE VISITOR
+========================= */
+// PUT /:id/accept-decline
+router.put("/:id/accept-decline", async (req, res) => {
+  try {
+    const { accepted } = req.body; // true = accept, false = decline
+    if (typeof accepted !== "boolean")
+      return res.status(400).json({ error: "Accepted must be boolean" });
+
+    const visitor = await Visitor.findById(req.params.id);
+    if (!visitor) return res.status(404).json({ error: "Visitor not found" });
+
+    visitor.accepted = accepted;
+    await visitor.save();
+
+    // Sync with Appointment if exists
+    const appointment = await Appointment.findOne({ contactNumber: visitor.contactNumber });
+    if (appointment) {
+      appointment.accepted = accepted;
+      await appointment.save();
+    }
+
+    // ✅ Send email automatically
+    if (visitor.email) {
+      const subject = accepted ? "Visitor Accepted" : "Visitor Declined";
+      const message = accepted
+        ? `Hello ${visitor.name}, your registration has been accepted. You may now enter the premises.`
+        : `Hello ${visitor.name}, unfortunately your registration has been declined. Please contact the office for more info.`;
+
+      try {
+        await sendEmail(visitor.email, subject, message);
+      } catch (emailErr) {
+        console.error(`❌ Failed to send accept/decline email to ${visitor.email}:`, emailErr);
+        // optional: continue without failing
+      }
+    }
+
+    res.json({ message: `Visitor ${accepted ? "accepted" : "declined"}`, visitor });
+  } catch (err) {
+    console.error("❌ Failed to accept/decline visitor:", err);
+    res.status(500).json({ error: "Failed to update visitor status" });
+  }
+});
+
+/** =========================
+ * NOTIFY VISITOR EMAIL (ACCEPT/DECLINE)
+========================= */
+router.post("/:id/notify", async (req, res) => {
+  try {
+    const { accepted } = req.body;
+    if (typeof accepted !== "boolean") return res.status(400).json({ error: "Accepted must be boolean" });
+
+    const visitor = await Visitor.findById(req.params.id);
+    if (!visitor) return res.status(404).json({ error: "Visitor not found" });
+    if (!visitor.email) return res.status(400).json({ error: "Visitor has no email" });
+
+    const subject = accepted ? "Visitor Accepted" : "Visitor Declined";
+    const message = accepted
+      ? `Hello ${visitor.name}, your registration has been accepted. You may now enter the premises.`
+      : `Hello ${visitor.name}, unfortunately your registration has been declined. Please contact the office for more info.`;
+
+    const result = await sendEmail(visitor.email, subject, message);
+
+    if (!result.success) return res.status(500).json({ error: result.error });
+
+    res.json({ success: true, message: "Email sent successfully" });
+  } catch (err) {
+    console.error("❌ Failed to send accept/decline email:", err);
+    res.status(500).json({ error: "Failed to send email" });
+  }
+});
+
+/** =========================
+ * DEBUG: TEST EMAIL
+========================= */
 router.get("/debug/test-email", async (req, res) => {
   try {
     const result = await sendEmail(
-      "hectorjoshlopez@gmail.com", // send to yourself
+      "hectorjoshlopez@gmail.com",
       "Test Email from Visitor System",
       "If you received this, SMTP is working correctly."
     );
