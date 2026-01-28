@@ -4,7 +4,7 @@ const appointmentSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     contactNumber: { type: String, required: true },
-    email: { type: String, required: false },
+    email: { type: String, required: false }, // ✅ Added email
     office: { type: String, required: true },
     purpose: { type: String, required: true },
     scheduledDate: { type: Date, required: true },
@@ -12,7 +12,6 @@ const appointmentSchema = new mongoose.Schema(
     idFile: String,
     qrData: String,
 
-    // SYSTEM TIME LOGS
     processingStartedTime: Date,
     officeProcessedTime: Date,
     timeIn: Date,
@@ -36,25 +35,7 @@ const appointmentSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-/////////////////////////////////////////////////////
-// 🚀 PERFORMANCE INDEXES
-/////////////////////////////////////////////////////
-
-// For quickly finding pending appointments
-appointmentSchema.index({ processingStartedTime: 1, officeProcessedTime: 1 });
-
-// For sorting recent appointments
-appointmentSchema.index({ createdAt: -1 });
-
-// For fast lookup by contactNumber
-appointmentSchema.index({ contactNumber: 1 });
-
-// For filtering accepted/declined
-appointmentSchema.index({ accepted: 1 });
-
-/////////////////////////////////////////////////////
 // ✅ Virtual status
-/////////////////////////////////////////////////////
 appointmentSchema.virtual("status").get(function () {
   const now = new Date();
 
