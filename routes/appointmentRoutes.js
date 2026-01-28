@@ -5,42 +5,58 @@ import { sendEmail } from "../utils/email.js";
 
 const router = express.Router();
 
-// ✅ AUTO MARK OVERDUE (for notifications)
-const markOverdueAppointments = async () => {
-  const now = new Date();
+/** =========================
+ * HELPER: Mark overdue appointments asynchronously
+========================= */
+const markOverdueAppointmentsAsync = async () => {
+  try {
+    const now = new Date();
 
-  const appointments = await Appointment.find({
-    processingStartedTime: null,
-    officeProcessedTime: null
-  });
+    // Find only appointments that are pending
+    const appointments = await Appointment.find({
+      processingStartedTime: null,
+      officeProcessedTime: null
+    });
 
-  for (const appt of appointments) {
-    const sched = new Date(appt.scheduledDate);
-    const [h, m] = appt.scheduledTime.split(":").map(Number);
-    sched.setHours(h, m, 0, 0);
+    for (const appt of appointments) {
+      const sched = new Date(appt.scheduledDate);
+      const [h, m] = appt.scheduledTime.split(":").map(Number);
+      sched.setHours(h, m, 0, 0);
 
-    if (now > sched && appt.email && !appt.overdueEmailSent) {
-      try {
-        await sendEmail(
+      if (now > sched && appt.email && !appt.overdueEmailSent) {
+        // Send email asynchronously
+        sendEmail(
           appt.email,
           "Overdue Appointment Notification",
           `Hello ${appt.name}, your scheduled appointment is now overdue. Please return to the guard.`
-        );
-        appt.overdueEmailSent = true;
-        await appt.save();
-        console.log(`📧 Overdue email sent to ${appt.email}`);
-      } catch (emailErr) {
-        console.error(`❌ Failed to send email to ${appt.email}:`, emailErr);
+        )
+        .then(() => {
+          appt.overdueEmailSent = true;
+          return appt.save();
+        })
+        .then(() => console.log(`📧 Overdue email sent to ${appt.email}`))
+        .catch(emailErr => console.error(`❌ Failed to send email to ${appt.email}:`, emailErr));
       }
     }
+  } catch (err) {
+    console.error("❌ Failed to mark overdue appointments:", err);
   }
 };
 
-// GET all appointments
+/** =========================
+ * GET all appointments (optimized)
+========================= */
 router.get("/", async (req, res) => {
   try {
-    await markOverdueAppointments();
-    const appointments = await Appointment.find().sort({ createdAt: -1 });
+    // Trigger overdue processing asynchronously
+    setImmediate(markOverdueAppointmentsAsync);
+
+    // Fetch appointments with pagination & lean
+    const appointments = await Appointment.find()
+      .sort({ createdAt: -1 })
+      .limit(100)   // Limit for performance
+      .lean();
+
     res.json(appointments);
   } catch (err) {
     console.error(err);
@@ -48,7 +64,9 @@ router.get("/", async (req, res) => {
   }
 });
 
-// GET appointment by contactNumber
+/** =========================
+ * GET appointment by contactNumber
+========================= */
 router.get("/:contactNumber", async (req, res) => {
   try {
     const appointment = await Appointment.findOne({ contactNumber: req.params.contactNumber }).lean();
@@ -73,7 +91,9 @@ router.get("/:contactNumber", async (req, res) => {
   }
 });
 
-// CREATE new appointment with anomaly detection
+/** =========================
+ * CREATE new appointment
+========================= */
 router.post("/", async (req, res) => {
   try {
     const { name, contactNumber, email, office, purpose, scheduledDate, scheduledTime, idFile } = req.body;
@@ -128,14 +148,15 @@ router.post("/", async (req, res) => {
     });
 
     res.status(201).json({ message: "Saved", appointment });
-
   } catch (err) {
     console.error("❌ Failed to save appointment:", err);
     res.status(500).json({ error: "Failed to save appointment" });
   }
 });
 
-// START PROCESSING
+/** =========================
+ * START PROCESSING
+========================= */
 router.put("/:id/start-processing", async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id);
@@ -157,7 +178,9 @@ router.put("/:id/start-processing", async (req, res) => {
   }
 });
 
-// OFFICE PROCESSED
+/** =========================
+ * OFFICE PROCESSED
+========================= */
 router.put("/:id/office-processed", async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id);
@@ -180,7 +203,9 @@ router.put("/:id/office-processed", async (req, res) => {
   }
 });
 
-// SUBMIT FEEDBACK
+/** =========================
+ * SUBMIT FEEDBACK
+========================= */
 router.patch("/:contactNumber/feedback", async (req, res) => {
   try {
     const { feedback } = req.body;
@@ -202,7 +227,6 @@ router.patch("/:contactNumber/feedback", async (req, res) => {
 /** =========================
  * ACCEPT / DECLINE APPOINTMENT
 ========================= */
-// PUT /:id/accept
 router.put("/:id/accept", async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id);
@@ -211,12 +235,10 @@ router.put("/:id/accept", async (req, res) => {
     appointment.accepted = true;
     await appointment.save();
 
-    // Update corresponding Visitor
     const visitor = await Visitor.findOne({ contactNumber: appointment.contactNumber });
     if (visitor) {
       visitor.accepted = true;
       await visitor.save();
-      // ✅ removed duplicate email sending
     }
 
     res.json({ message: "Appointment accepted", appointment });
@@ -226,7 +248,6 @@ router.put("/:id/accept", async (req, res) => {
   }
 });
 
-// PUT /:id/decline
 router.put("/:id/decline", async (req, res) => {
   try {
     const appointment = await Appointment.findById(req.params.id);
@@ -235,12 +256,10 @@ router.put("/:id/decline", async (req, res) => {
     appointment.accepted = false;
     await appointment.save();
 
-    // Update corresponding Visitor
     const visitor = await Visitor.findOne({ contactNumber: appointment.contactNumber });
     if (visitor) {
       visitor.accepted = false;
       await visitor.save();
-      // ✅ removed duplicate email sending
     }
 
     res.json({ message: "Appointment declined", appointment });

@@ -16,10 +16,8 @@ const visitorSchema = new mongoose.Schema(
     // SYSTEM TIME LOGS
     timeIn: Date,
     timeOut: Date,
-
     processingStartedTime: Date,
     officeProcessedTime: Date,
-
     processed: { type: Boolean, default: false },
     idFile: String,
 
@@ -43,49 +41,40 @@ const visitorSchema = new mongoose.Schema(
     qrData: String,
 
     // 🔔 NOTIFICATIONS
-    overdueSmsSent: {
-      type: Boolean,
-      default: false
-    },
-    overdueEmailSent: {
-      type: Boolean,
-      default: false
-    },
+    overdueSmsSent: { type: Boolean, default: false },
+    overdueEmailSent: { type: Boolean, default: false },
 
     // ✅ ACCEPT / DECLINE STATUS
-    accepted: {
-      type: Boolean,
-      default: null
-    },
+    accepted: { type: Boolean, default: null },
 
-    // 🆕 FIX: prevent duplicate accept/decline emails
-    acceptDeclineEmailSent: {
-      type: Boolean,
-      default: false
-    }
+    // 🆕 Prevent duplicate accept/decline emails
+    acceptDeclineEmailSent: { type: Boolean, default: false }
   },
   { timestamps: true }
 );
 
 /////////////////////////////////////////////////////
-// 🚀 PERFORMANCE INDEXES (THIS FIXES SLOW LOAD)
+// 🚀 PERFORMANCE INDEXES
 /////////////////////////////////////////////////////
 
-// Used when registering new visitor
+// Fast check for active visitors inside the premises
 visitorSchema.index({ contactNumber: 1, timeOut: 1 });
 
-// Used for checking daily bookings
+// Fast lookup for daily bookings
 visitorSchema.index({ contactNumber: 1, scheduledDate: 1 });
 
-// Used in GET visitors list
+// Fast GET visitors list by recency
 visitorSchema.index({ createdAt: -1 });
 
-// Used in filtering accepted visitors
+// Fast filter for accepted/declined visitors
 visitorSchema.index({ accepted: 1 });
 
-/////////////////////////////////////////////////////
+// Optional: frequently queried for overdue visitors
+visitorSchema.index({ officeProcessedTime: 1, timeOut: 1 });
 
+/////////////////////////////////////////////////////
 // ✅ Virtual status
+/////////////////////////////////////////////////////
 visitorSchema.virtual("status").get(function () {
   const now = new Date();
 

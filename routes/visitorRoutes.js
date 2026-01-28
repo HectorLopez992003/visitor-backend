@@ -6,35 +6,50 @@ import { sendEmail } from "../utils/email.js";
 const router = express.Router();
 
 /** =========================
- * GET ALL VISITORS
+ * GET ALL VISITORS (Optimized with pagination)
 ========================= */
 router.get("/", async (req, res) => {
   try {
-const visitors = await Visitor.find(
-  {},
-  {
-    name: 1,
-    contactNumber: 1,
-    email: 1,
-    office: 1,
-    purpose: 1,
-    scheduledDate: 1,
-    scheduledTime: 1,
-    timeIn: 1,
-    timeOut: 1,
-    processingStartedTime: 1,
-    officeProcessedTime: 1,
-    processed: 1,
-    overdueEmailSent: 1,
-    overdueSmsSent: 1,
-    accepted: 1
-  }
-)
-.sort({ createdAt: -1 })
-.limit(100)   // ADD THIS
-.lean();      // ADD THIS
+    // Pagination query params
+    const page = parseInt(req.query.page) || 1; // default page 1
+    const limit = parseInt(req.query.limit) || 50; // default 50 per page
+    const skip = (page - 1) * limit;
 
-    res.json(visitors);
+    // Only select the fields needed for listing
+    const fields = {
+      name: 1,
+      contactNumber: 1,
+      email: 1,
+      office: 1,
+      purpose: 1,
+      scheduledDate: 1,
+      scheduledTime: 1,
+      timeIn: 1,
+      timeOut: 1,
+      processingStartedTime: 1,
+      officeProcessedTime: 1,
+      processed: 1,
+      overdueEmailSent: 1,
+      overdueSmsSent: 1,
+      accepted: 1
+    };
+
+    // Fetch paginated visitors
+    const visitors = await Visitor.find({}, fields)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Total count for pagination info
+    const total = await Visitor.countDocuments();
+
+    res.json({
+      visitors,
+      total,
+      page,
+      limit
+    });
   } catch (err) {
     console.error("❌ Failed to fetch visitors:", err);
     res.status(500).json({ error: "Failed to fetch visitors" });
