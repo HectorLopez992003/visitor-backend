@@ -5,7 +5,7 @@ const visitorSchema = new mongoose.Schema(
     // BASIC INFO
     name: String,
     contactNumber: String,
-    email: String, // ✅ Added email
+    email: String,
     office: String,
     purpose: String,
 
@@ -47,7 +47,7 @@ const visitorSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
-    overdueEmailSent: { // ✅ Added email notification flag
+    overdueEmailSent: {
       type: Boolean,
       default: false
     },
@@ -55,11 +55,35 @@ const visitorSchema = new mongoose.Schema(
     // ✅ ACCEPT / DECLINE STATUS
     accepted: {
       type: Boolean,
-      default: null // null = pending, true = accepted, false = declined
+      default: null
+    },
+
+    // 🆕 FIX: prevent duplicate accept/decline emails
+    acceptDeclineEmailSent: {
+      type: Boolean,
+      default: false
     }
   },
   { timestamps: true }
 );
+
+/////////////////////////////////////////////////////
+// 🚀 PERFORMANCE INDEXES (THIS FIXES SLOW LOAD)
+/////////////////////////////////////////////////////
+
+// Used when registering new visitor
+visitorSchema.index({ contactNumber: 1, timeOut: 1 });
+
+// Used for checking daily bookings
+visitorSchema.index({ contactNumber: 1, scheduledDate: 1 });
+
+// Used in GET visitors list
+visitorSchema.index({ createdAt: -1 });
+
+// Used in filtering accepted visitors
+visitorSchema.index({ accepted: 1 });
+
+/////////////////////////////////////////////////////
 
 // ✅ Virtual status
 visitorSchema.virtual("status").get(function () {

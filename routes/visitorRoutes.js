@@ -10,27 +10,29 @@ const router = express.Router();
 ========================= */
 router.get("/", async (req, res) => {
   try {
-    const visitors = await Visitor.find(
-      {},
-      {
-        name: 1,
-        contactNumber: 1,
-        email: 1,
-        office: 1,
-        purpose: 1,
-        scheduledDate: 1,
-        scheduledTime: 1,
-        timeIn: 1,
-        timeOut: 1,
-        processingStartedTime: 1,
-        officeProcessedTime: 1,
-        processed: 1,
-        overdueEmailSent: 1,
-        overdueSmsSent: 1,
-        accepted: 1,
-        idFile: 1 
-      }
-    ).sort({ createdAt: -1 });
+const visitors = await Visitor.find(
+  {},
+  {
+    name: 1,
+    contactNumber: 1,
+    email: 1,
+    office: 1,
+    purpose: 1,
+    scheduledDate: 1,
+    scheduledTime: 1,
+    timeIn: 1,
+    timeOut: 1,
+    processingStartedTime: 1,
+    officeProcessedTime: 1,
+    processed: 1,
+    overdueEmailSent: 1,
+    overdueSmsSent: 1,
+    accepted: 1
+  }
+)
+.sort({ createdAt: -1 })
+.limit(100)   // ADD THIS
+.lean();      // ADD THIS
 
     res.json(visitors);
   } catch (err) {
