@@ -48,12 +48,44 @@ router.post("/register", async (req, res) => {
       `Hello ${name},\n\nYour verification code is: ${verificationCode}\n\nPlease enter this code to complete your registration.`
     );
 
+    console.log("📧 Email result:", emailResult);
     console.log("✅ New account created:", account);
-    res.status(201).json({ accountId: account._id, emailSent: emailResult.success });
 
+    res.status(201).json({ accountId: account._id, emailSent: emailResult.success });
   } catch (err) {
     console.error("❌ Register error:", err);
     res.status(500).json({ message: "Registration failed" });
+  }
+});
+
+/**
+ * SEND VERIFICATION CODE (for FE 'Send Verification Code' button)
+ */
+router.post("/send-code", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const account = await VisitorAccount.findOne({ email });
+    if (!account) return res.status(404).json({ message: "Account not found" });
+
+    // generate new 6-digit verification code
+    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    account.verificationCode = verificationCode;
+    await account.save();
+
+    const emailResult = await sendEmail(
+      email,
+      "Verify your email",
+      `Hello ${account.name},\n\nYour verification code is: ${verificationCode}\n\nPlease enter this code to complete your registration.`
+    );
+
+    console.log("📧 Send-code result:", emailResult);
+    res.json({ success: emailResult.success });
+  } catch (err) {
+    console.error("❌ Send-code error:", err);
+    res.status(500).json({ message: "Failed to send verification code" });
   }
 });
 
