@@ -4,19 +4,25 @@ const visitorAccountSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true
+      required: true,
     },
 
     email: {
       type: String,
       required: true,
-      unique: true
+      unique: true,
     },
 
     password: {
       type: String,
-      required: true
-    }
+      required: true,
+    },
+
+    contactNumber: {
+      type: String,
+      required: true, // make it required if you always want it
+      unique: false,  // set true if each number must be unique
+    },
   },
   { timestamps: true }
 );

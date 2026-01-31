@@ -12,11 +12,18 @@ router.post("/register", async (req, res) => {
     console.log("=== Register Request ===");
     console.log("Request body:", req.body);
 
-    const { name, email, password } = req.body;
+    const { name, email, password, contactNumber } = req.body;
 
-    if (!name || !email || !password) {
+    // Basic validation
+    if (!name || !email || !password || !contactNumber) {
       console.log("Missing fields in request");
-      return res.status(400).json({ message: "Name, email, and password are required" });
+      return res.status(400).json({ message: "Name, email, password, and contact number are required" });
+    }
+
+    // Optional: validate contact number format
+    const contactRegex = /^\+639\d{9}$/;
+    if (!contactRegex.test(contactNumber)) {
+      return res.status(400).json({ message: "Invalid contact number format. Use +639XXXXXXXXX" });
     }
 
     const existing = await VisitorAccount.findOne({ email });
@@ -30,7 +37,8 @@ router.post("/register", async (req, res) => {
     const account = await VisitorAccount.create({
       name,
       email,
-      password: hashedPassword
+      password: hashedPassword,
+      contactNumber,
     });
 
     console.log("✅ New account created:", account);
