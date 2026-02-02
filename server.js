@@ -7,11 +7,13 @@ import visitorRoutes from "./routes/visitorRoutes.js";
 import visitorAuthRoutes from "./routes/visitorAuthRoutes.js";
 import appointmentRoutes from "./routes/appointmentRoutes.js";
 import suggestionRoutes from "./routes/suggestionRoutes.js";
+import userRoutes from "./routes/userRoutes.js"; // ✅ New User Management routes
 
 import Visitor from "./models/Visitor.js";
 import Appointment from "./models/Appointment.js";
-import { sendEmail } from "./utils/email.js"; // ✅ Email helper
-import { sendOverdueEmail } from "./utils/overdue.js"; // ✅ New helper
+import User from "./models/User.js"; // ✅ User model
+import { sendEmail } from "./utils/email.js";
+import { sendOverdueEmail } from "./utils/overdue.js";
 
 dotenv.config();
 
@@ -43,6 +45,7 @@ app.use("/api/visitor-auth", visitorAuthRoutes);
 app.use("/api/visitors", visitorRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/suggestions", suggestionRoutes);
+app.use("/api/users", userRoutes); // ✅ User routes
 
 /* ======================
    HEALTH CHECK
@@ -79,7 +82,7 @@ const checkOverdueVisitorsAndAppointments = async () => {
     -------------------- */
     const overdueAppointments = await Appointment.find({
       officeProcessedTime: { $ne: null },
-      processed: true,          // ✅ Fix: use processed instead of timeOut
+      processed: true,
       overdueEmailSent: false,
       email: { $ne: null },
     });
@@ -96,6 +99,30 @@ const checkOverdueVisitorsAndAppointments = async () => {
 
 // Run every 1 minute
 setInterval(checkOverdueVisitorsAndAppointments, 1 * 60 * 1000);
+
+/* ======================
+   DEFAULT ADMIN USER
+====================== */
+const createDefaultAdmin = async () => {
+  try {
+    const existingAdmin = await User.findOne({ role: "Admin" });
+    if (existingAdmin) return;
+
+    const defaultAdmin = new User({
+      name: "Admin",
+      email: "admin@example.com",
+      password: "Admin123!", // ✅ Default password (hashed in pre-save)
+      role: "Admin",
+      active: true,
+    });
+
+    await defaultAdmin.save();
+    console.log("✅ Default Admin user created: admin@example.com / Admin123!");
+  } catch (err) {
+    console.error("❌ Failed to create default admin user:", err);
+  }
+};
+createDefaultAdmin();
 
 /* ======================
    SERVER
