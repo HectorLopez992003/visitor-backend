@@ -8,6 +8,7 @@ import visitorAuthRoutes from "./routes/visitorAuthRoutes.js";
 import appointmentRoutes from "./routes/appointmentRoutes.js";
 import suggestionRoutes from "./routes/suggestionRoutes.js";
 import userRoutes from "./routes/userRoutes.js"; // ✅ New User Management routes
+import officeAuthRoutes from "./routes/officeAuthRoutes.js"; // ✅ Office login routes
 
 import Visitor from "./models/Visitor.js";
 import Appointment from "./models/Appointment.js";
@@ -46,6 +47,7 @@ app.use("/api/visitors", visitorRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/suggestions", suggestionRoutes);
 app.use("/api/users", userRoutes); // ✅ User routes
+app.use("/api/office-auth", officeAuthRoutes); // ✅ Office/Admin login
 
 /* ======================
    HEALTH CHECK
