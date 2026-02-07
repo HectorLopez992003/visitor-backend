@@ -17,11 +17,11 @@ const userSchema = new mongoose.Schema({
     required: true     // 🔥 must have password
   },
 
-  role: { 
-    type: String, 
-    enum: ["Admin", "Office Staff", "Guard"], 
-    default: "Guard" 
-  },
+role: { 
+  type: String, 
+  enum: ["Super Admin", "Admin", "Office Staff", "Guard"], 
+  default: "Guard" 
+},
 
   active: { 
     type: Boolean, 
