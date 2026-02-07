@@ -13,8 +13,8 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user
-    const user = await User.findOne({ email });
+    // Normalize email to lowercase
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) return res.status(401).json({ message: "Invalid credentials" });
 
     // Check password
@@ -34,16 +34,16 @@ router.post("/login", async (req, res) => {
       { expiresIn: "8h" }
     );
 
-res.json({
-  token,
-  user: {
-    _id: user._id,
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    active: user.active,
-  },
-});
+    res.json({
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        active: user.active,
+      },
+    });
   } catch (err) {
     console.error("Office login error:", err);
     res.status(500).json({ message: "Server error" });
@@ -59,10 +59,13 @@ router.post("/create-default-admin", async (req, res) => {
     if (existingAdmin)
       return res.status(400).json({ message: "Admin already exists" });
 
+    // Hash password before saving
+    const hashedPassword = await bcrypt.hash("Admin123!", 10);
+
     const defaultAdmin = new User({
       name: "Admin",
       email: "admin@example.com",
-      password: "Admin123!", // hashed in pre-save
+      password: hashedPassword,
       role: "Admin",
       active: true,
     });
@@ -88,10 +91,13 @@ router.post("/create-super-admin", async (req, res) => {
     if (exist)
       return res.status(400).json({ message: "Super Admin already exists" });
 
+    // Hash password before saving
+    const hashedPassword = await bcrypt.hash("SuperAdmin123!", 10);
+
     const superAdmin = new User({
       name: "Super Admin",
       email: "superadmin@office.com",
-      password: "SuperAdmin123!",
+      password: hashedPassword,
       role: "Super Admin",
       active: true,
     });
