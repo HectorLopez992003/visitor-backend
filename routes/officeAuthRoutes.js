@@ -34,15 +34,16 @@ router.post("/login", async (req, res) => {
       { expiresIn: "8h" }
     );
 
-    res.json({
-      token,
-      user: {
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        active: user.active,
-      },
-    });
+res.json({
+  token,
+  user: {
+    _id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    active: user.active,
+  },
+});
   } catch (err) {
     console.error("Office login error:", err);
     res.status(500).json({ message: "Server error" });
