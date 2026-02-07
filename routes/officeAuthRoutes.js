@@ -1,13 +1,13 @@
 // routes/officeAuthRoutes.js
 import express from "express";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken"; // ✅ JWT
+import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
 const router = express.Router();
 
 /**
- * OFFICE LOGIN (Admins + Office Staff + Super Admin)
+ * OFFICE LOGIN (Super Admin, Admin, Office Staff)
  */
 router.post("/login", async (req, res) => {
   try {
@@ -27,24 +27,21 @@ router.post("/login", async (req, res) => {
 
     if (!user.active) return res.status(403).json({ message: "Account inactive" });
 
-    // ✅ CREATE JWT
+    // CREATE JWT
     const token = jwt.sign(
-      {
-        id: user._id,
-        role: user.role,
-        name: user.name,
-      },
-      process.env.JWT_SECRET, // make sure this is set in .env
+      { id: user._id, role: user.role, name: user.name },
+      process.env.JWT_SECRET,
       { expiresIn: "8h" }
     );
 
-    // ✅ RETURN TOKEN + USER INFO
     res.json({
       token,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      active: user.active,
+      user: {
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        active: user.active,
+      },
     });
   } catch (err) {
     console.error("Office login error:", err);
@@ -53,7 +50,7 @@ router.post("/login", async (req, res) => {
 });
 
 /**
- * CREATE DEFAULT ADMIN (Optional endpoint)
+ * CREATE DEFAULT ADMIN (RUN ONCE)
  */
 router.post("/create-default-admin", async (req, res) => {
   try {
@@ -64,7 +61,7 @@ router.post("/create-default-admin", async (req, res) => {
     const defaultAdmin = new User({
       name: "Admin",
       email: "admin@example.com",
-      password: "Admin123!", // will be hashed by pre-save
+      password: "Admin123!", // hashed in pre-save
       role: "Admin",
       active: true,
     });
@@ -93,7 +90,7 @@ router.post("/create-super-admin", async (req, res) => {
     const superAdmin = new User({
       name: "Super Admin",
       email: "superadmin@office.com",
-      password: "SuperAdmin123!", // will be hashed
+      password: "SuperAdmin123!",
       role: "Super Admin",
       active: true,
     });

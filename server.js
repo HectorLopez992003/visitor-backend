@@ -127,6 +127,30 @@ const createDefaultAdmin = async () => {
 createDefaultAdmin();
 
 /* ======================
+   DEFAULT SUPER ADMIN USER
+====================== */
+const createSuperAdmin = async () => {
+  try {
+    const existingSuper = await User.findOne({ role: "Super Admin" });
+    if (existingSuper) return;
+
+    const superAdmin = new User({
+      name: "Super Admin",
+      email: "superadmin@office.com",
+      password: "SuperAdmin123!", // hashed in pre-save
+      role: "Super Admin",
+      active: true,
+    });
+
+    await superAdmin.save();
+    console.log("✅ Super Admin created: superadmin@office.com / SuperAdmin123!");
+  } catch (err) {
+    console.error("❌ Failed to create Super Admin:", err);
+  }
+};
+createSuperAdmin();
+
+/* ======================
    SERVER
 ====================== */
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
