@@ -7,8 +7,9 @@ import visitorRoutes from "./routes/visitorRoutes.js";
 import visitorAuthRoutes from "./routes/visitorAuthRoutes.js";
 import appointmentRoutes from "./routes/appointmentRoutes.js";
 import suggestionRoutes from "./routes/suggestionRoutes.js";
-import userRoutes from "./routes/userRoutes.js"; // ✅ New User Management routes
-import officeAuthRoutes from "./routes/officeAuthRoutes.js"; // ✅ Office login routes
+import userRoutes from "./routes/userRoutes.js";
+import officeAuthRoutes from "./routes/officeAuthRoutes.js";
+import auditTrailRoutes from "./routes/auditTrailRoutes.js"; // ✅ ADD THIS
 
 import Visitor from "./models/Visitor.js";
 import Appointment from "./models/Appointment.js";
@@ -42,12 +43,16 @@ mongoose
 /* ======================
    ROUTES
 ====================== */
+/* ======================
+   ROUTES
+====================== */
 app.use("/api/visitor-auth", visitorAuthRoutes);
 app.use("/api/visitors", visitorRoutes);
 app.use("/api/appointments", appointmentRoutes);
 app.use("/api/suggestions", suggestionRoutes);
-app.use("/api/users", userRoutes); // ✅ User routes
-app.use("/api/office-auth", officeAuthRoutes); // ✅ Office/Admin login
+app.use("/api/users", userRoutes);
+app.use("/api/office-auth", officeAuthRoutes);
+app.use("/api/audit-trail", auditTrailRoutes); // ✅ ADD THIS LINE
 
 /* ======================
    HEALTH CHECK

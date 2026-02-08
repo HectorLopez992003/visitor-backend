@@ -1,7 +1,8 @@
 import express from "express";
 import Visitor from "../models/Visitor.js";
 import Appointment from "../models/Appointment.js";
-import { sendEmail } from "../utils/email.js"; 
+import { sendEmail } from "../utils/email.js";
+import AuditTrail from "../models/AuditTrail.js"; // 👈 ADD THIS LINE
 
 const router = express.Router();
 
@@ -109,6 +110,27 @@ const updateVisitor = async (id, updateFields, res, action) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(id, updateFields, { new: true });
     if (!visitor) return res.status(404).json({ error: "Visitor not found" });
+
+// ✅ AUDIT TRAIL LOGGING
+try {
+  let actionText = null;
+
+  if (updateFields.timeIn) actionText = "Visitor Time In";
+  if (updateFields.timeOut) actionText = "Visitor Time Out";
+  if (updateFields.processingStartedTime) actionText = "Processing Started";
+  if (updateFields.officeProcessedTime) actionText = "Visitor Processed";
+
+  if (actionText) {
+    await AuditTrail.create({
+      visitorId: visitor._id,
+      visitorName: visitor.name,
+      action: actionText,
+      performedBy: "Office Staff",
+    });
+  }
+} catch (auditErr) {
+  console.error("❌ Audit trail error:", auditErr);
+}
 
     const appointment = await Appointment.findOne({ contactNumber: visitor.contactNumber });
     if (appointment) {
