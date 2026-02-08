@@ -120,14 +120,15 @@ try {
   if (updateFields.processingStartedTime) actionText = "Processing Started";
   if (updateFields.officeProcessedTime) actionText = "Visitor Processed";
 
-  if (actionText) {
-    await AuditTrail.create({
-      visitorId: visitor._id,
-      visitorName: visitor.name,
-      action: actionText,
-      performedBy: "Office Staff",
-    });
-  }
+if (actionText) {
+  await AuditTrail.create({
+    visitorId: visitor._id,
+    visitorName: visitor.name,
+    visitorOffice: visitor.office, // ✅ Add this
+    action: actionText,
+    performedBy: performedByName || "Office Staff", // optionally pass name dynamically
+  });
+}
 } catch (auditErr) {
   console.error("❌ Audit trail error:", auditErr);
 }
