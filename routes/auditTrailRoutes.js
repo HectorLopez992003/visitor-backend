@@ -1,23 +1,19 @@
 import express from "express";
 import AuditTrail from "../models/AuditTrail.js";
-import Visitor from "../models/Visitor.js"; // ✅ import Visitor model
 
 const router = express.Router();
 
 // GET ALL AUDIT LOGS
+// GET ALL AUDIT LOGS
 router.get("/", async (req, res) => {
   try {
-    const { office } = req.query;
+    const { office } = req.query; // ✅ Get optional office from query params
 
+    // Build the query object
     let query = {};
-    if (office) {
-      // Only fetch logs for visitors in this office
-      const visitors = await Visitor.find({ office }).select("_id");
-      const visitorIds = visitors.map(v => v._id);
-      query.visitorId = { $in: visitorIds };
-    }
+    if (office) query.visitorOffice = office; // ✅ Only filter by office if provided
 
-    const logs = await AuditTrail.find(query)
+    const logs = await AuditTrail.find(query) // use the query
       .sort({ timestamp: -1 })
       .limit(200);
 
@@ -29,3 +25,5 @@ router.get("/", async (req, res) => {
 });
 
 export default router;
+
+
