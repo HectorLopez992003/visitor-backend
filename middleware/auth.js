@@ -1,33 +1,23 @@
-import express from "express";
-import AuditTrail from "../models/AuditTrail.js";
-import { verifyJWT } from "../middleware/auth.js";
+import jwt from "jsonwebtoken";
 
-const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 
-// GET ALL AUDIT LOGS
-router.get("/", verifyJWT, async (req, res) => {
+/**
+ * Middleware to verify JWT token
+ */
+export function verifyJWT(req, res, next) {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader) return res.status(401).json({ error: "Missing Authorization header" });
+
+  const token = authHeader.split(" ")[1]; // Bearer <token>
+  if (!token) return res.status(401).json({ error: "Missing token" });
+
   try {
-    const { office } = req.query;
-    let query = {};
-
-    // Office Staff: only see logs from their office
-    if (req.user.role === "Office Staff") {
-      query.visitorOffice = req.user.office;
-    } 
-    // Admin / Super Admin: can filter by office if provided
-    else if (office) {
-      query.visitorOffice = office;
-    }
-
-    const logs = await AuditTrail.find(query)
-      .sort({ timestamp: -1 })
-      .limit(200);
-
-    res.json(logs);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
   } catch (err) {
-    console.error("❌ Failed to fetch audit trail:", err);
-    res.status(500).json({ error: "Failed to fetch audit trail" });
+    console.error("❌ Invalid JWT:", err.message);
+    return res.status(403).json({ error: "Invalid or expired token" });
   }
-});
-
-export default router;
+}
