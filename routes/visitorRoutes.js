@@ -3,13 +3,14 @@ import Visitor from "../models/Visitor.js";
 import Appointment from "../models/Appointment.js";
 import { sendEmail } from "../utils/email.js";
 import AuditTrail from "../models/AuditTrail.js";
+import { verifyJWT } from "../middleware/auth.js"; // ✅ import middleware
 
 const router = express.Router();
 
 /** =========================
  * GET ALL VISITORS
 ========================= */
-router.get("/", async (req, res) => {
+router.get("/", verifyJWT, async (req, res) => { // ✅ protect route
   try {
     const visitors = await Visitor.find(
       {},
@@ -43,7 +44,7 @@ router.get("/", async (req, res) => {
 /** =========================
  * CREATE VISITOR
 ========================= */
-router.post("/", async (req, res) => {
+router.post("/", verifyJWT, async (req, res) => { // ✅ protect route
   try {
     const {
       contactNumber,
@@ -55,8 +56,7 @@ router.post("/", async (req, res) => {
       scheduledTime,
       idFile,
       registrationType,
-      qrData,
-      performedBy
+      qrData
     } = req.body;
 
     if (!contactNumber) return res.status(400).json({ error: "Contact number is required" });
@@ -104,7 +104,7 @@ router.post("/", async (req, res) => {
         visitorName: visitor.name,
         visitorOffice: visitor.office,
         action: "Visitor Created",
-        performedBy: performedBy || "Office Staff"
+        performedBy: req.user.name // ✅ logged-in user
       });
     } catch (auditErr) {
       console.error("❌ Audit trail error (create visitor):", auditErr);
@@ -120,7 +120,7 @@ router.post("/", async (req, res) => {
 /** =========================
  * HELPER: Update Visitor
 ========================= */
-const updateVisitor = async (id, updateFields, res, action, performedBy = "Office Staff") => {
+const updateVisitor = async (id, updateFields, res, action, performedBy) => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(id, updateFields, { new: true });
     if (!visitor) return res.status(404).json({ error: "Visitor not found" });
@@ -139,7 +139,7 @@ const updateVisitor = async (id, updateFields, res, action, performedBy = "Offic
           visitorName: visitor.name,
           visitorOffice: visitor.office,
           action: actionText,
-          performedBy: performedBy
+          performedBy // ✅ passed logged-in user
         });
       }
     } catch (auditErr) {
@@ -170,20 +170,20 @@ const updateVisitor = async (id, updateFields, res, action, performedBy = "Offic
 /** =========================
  * TIME IN / TIME OUT / PROCESSING / PROCESSED / DELETE
 ========================= */
-router.put("/:id/time-in", (req, res) =>
-  updateVisitor(req.params.id, { timeIn: new Date() }, res, "set time in", req.body.performedBy)
+router.put("/:id/time-in", verifyJWT, (req, res) =>
+  updateVisitor(req.params.id, { timeIn: new Date() }, res, "set time in", req.user.name)
 );
-router.put("/:id/time-out", (req, res) =>
-  updateVisitor(req.params.id, { timeOut: new Date() }, res, "set time out", req.body.performedBy)
+router.put("/:id/time-out", verifyJWT, (req, res) =>
+  updateVisitor(req.params.id, { timeOut: new Date() }, res, "set time out", req.user.name)
 );
-router.put("/:id/start-processing", (req, res) =>
-  updateVisitor(req.params.id, { processingStartedTime: new Date() }, res, "start processing", req.body.performedBy)
+router.put("/:id/start-processing", verifyJWT, (req, res) =>
+  updateVisitor(req.params.id, { processingStartedTime: new Date() }, res, "start processing", req.user.name)
 );
-router.put("/:id/office-processed", (req, res) =>
-  updateVisitor(req.params.id, { officeProcessedTime: new Date(), processed: true }, res, "mark as processed", req.body.performedBy)
+router.put("/:id/office-processed", verifyJWT, (req, res) =>
+  updateVisitor(req.params.id, { officeProcessedTime: new Date(), processed: true }, res, "mark as processed", req.user.name)
 );
 
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", verifyJWT, async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndDelete(req.params.id);
     if (!visitor) return res.status(404).json({ error: "Visitor not found" });
@@ -195,7 +195,7 @@ router.delete("/:id", async (req, res) => {
         visitorName: visitor.name,
         visitorOffice: visitor.office,
         action: "Visitor Deleted",
-        performedBy: "Office Staff"
+        performedBy: req.user.name
       });
     } catch (auditErr) {
       console.error("❌ Audit trail error (delete visitor):", auditErr);
@@ -211,7 +211,7 @@ router.delete("/:id", async (req, res) => {
 /** =========================
  * SEND OVERDUE EMAIL
 ========================= */
-router.post("/:id/send-overdue-email", async (req, res) => {
+router.post("/:id/send-overdue-email", verifyJWT, async (req, res) => {
   try {
     const visitor = await Visitor.findById(req.params.id);
     if (!visitor) return res.status(404).json({ success: false, message: "Visitor not found" });
@@ -242,9 +242,9 @@ router.post("/:id/send-overdue-email", async (req, res) => {
 /** =========================
  * ACCEPT / DECLINE VISITOR
 ========================= */
-router.put("/:id/accept-decline", async (req, res) => {
+router.put("/:id/accept-decline", verifyJWT, async (req, res) => {
   try {
-    const { accepted, performedBy } = req.body;
+    const { accepted } = req.body;
     if (typeof accepted !== "boolean") return res.status(400).json({ error: "Accepted must be boolean" });
 
     const visitor = await Visitor.findById(req.params.id);
@@ -266,7 +266,7 @@ router.put("/:id/accept-decline", async (req, res) => {
         visitorName: visitor.name,
         visitorOffice: visitor.office,
         action: accepted ? "Visitor Accepted" : "Visitor Declined",
-        performedBy: performedBy || "Office Staff"
+        performedBy: req.user.name
       });
     } catch (auditErr) {
       console.error("❌ Audit trail error (accept/decline):", auditErr);
@@ -298,7 +298,7 @@ router.put("/:id/accept-decline", async (req, res) => {
 /** =========================
  * NOTIFY VISITOR EMAIL (disabled)
 ========================= */
-router.post("/:id/notify", async (req, res) => {
+router.post("/:id/notify", verifyJWT, async (req, res) => {
   try {
     res.json({ message: "This endpoint is now disabled to prevent duplicate emails. Use accept-decline instead." });
   } catch (err) {
@@ -310,7 +310,7 @@ router.post("/:id/notify", async (req, res) => {
 /** =========================
  * DEBUG: TEST EMAIL
 ========================= */
-router.get("/debug/test-email", async (req, res) => {
+router.get("/debug/test-email", verifyJWT, async (req, res) => {
   try {
     const result = await sendEmail(
       "hectorjoshlopez@gmail.com",

@@ -1,32 +1,33 @@
-import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
-dotenv.config();
+import express from "express";
+import AuditTrail from "../models/AuditTrail.js";
+import { verifyJWT } from "../middleware/auth.js";
 
-// Verify JWT middleware
-export const verifyJWT = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  if (!authHeader) return res.status(401).json({ message: "No token provided" });
+const router = express.Router();
 
-  const token = authHeader.split(" ")[1]; // Bearer <token>
-  if (!token) return res.status(401).json({ message: "No token provided" });
-
+// GET ALL AUDIT LOGS
+router.get("/", verifyJWT, async (req, res) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decoded; // attach user info
-    next();
-  } catch (err) {
-    console.error("JWT verification failed:", err);
-    return res.status(403).json({ message: "Invalid or expired token" });
-  }
-};
+    const { office } = req.query;
+    let query = {};
 
-// Role-based access
-export const requireRole = (...roles) => (req, res, next) => {
-  if (!req.user || !req.user.role) {
-    return res.status(401).json({ message: "Unauthorized" });
+    // Office Staff: only see logs from their office
+    if (req.user.role === "Office Staff") {
+      query.visitorOffice = req.user.office;
+    } 
+    // Admin / Super Admin: can filter by office if provided
+    else if (office) {
+      query.visitorOffice = office;
+    }
+
+    const logs = await AuditTrail.find(query)
+      .sort({ timestamp: -1 })
+      .limit(200);
+
+    res.json(logs);
+  } catch (err) {
+    console.error("❌ Failed to fetch audit trail:", err);
+    res.status(500).json({ error: "Failed to fetch audit trail" });
   }
-  if (!roles.includes(req.user.role)) {
-    return res.status(403).json({ message: "Insufficient privileges" });
-  }
-  next();
-};
+});
+
+export default router;
