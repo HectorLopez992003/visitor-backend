@@ -2,7 +2,7 @@ import express from "express";
 import Visitor from "../models/Visitor.js";
 import Appointment from "../models/Appointment.js";
 import { sendEmail } from "../utils/email.js";
-import AuditTrail from "../models/AuditTrail.js"; // 👈 ADD THIS LINE
+import AuditTrail from "../models/AuditTrail.js";
 
 const router = express.Router();
 
@@ -56,6 +56,7 @@ router.post("/", async (req, res) => {
       idFile,
       registrationType,
       qrData,
+      performedBy
     } = req.body;
 
     if (!contactNumber) return res.status(400).json({ error: "Contact number is required" });
@@ -96,6 +97,19 @@ router.post("/", async (req, res) => {
       accepted: null
     });
 
+    // Audit trail for creation
+    try {
+      await AuditTrail.create({
+        visitorId: visitor._id,
+        visitorName: visitor.name,
+        visitorOffice: visitor.office,
+        action: "Visitor Created",
+        performedBy: performedBy || "Office Staff"
+      });
+    } catch (auditErr) {
+      console.error("❌ Audit trail error (create visitor):", auditErr);
+    }
+
     res.status(201).json(visitor);
   } catch (err) {
     console.error("❌ Failed to save visitor:", err);
@@ -106,32 +120,31 @@ router.post("/", async (req, res) => {
 /** =========================
  * HELPER: Update Visitor
 ========================= */
-const updateVisitor = async (id, updateFields, res, action) => {
+const updateVisitor = async (id, updateFields, res, action, performedBy = "Office Staff") => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(id, updateFields, { new: true });
     if (!visitor) return res.status(404).json({ error: "Visitor not found" });
 
-// ✅ AUDIT TRAIL LOGGING
-try {
-  let actionText = null;
+    // ---------------- AUDIT TRAIL ----------------
+    try {
+      let actionText = null;
+      if (updateFields.timeIn) actionText = "Visitor Time In";
+      if (updateFields.timeOut) actionText = "Visitor Time Out";
+      if (updateFields.processingStartedTime) actionText = "Processing Started";
+      if (updateFields.officeProcessedTime) actionText = "Visitor Processed";
 
-  if (updateFields.timeIn) actionText = "Visitor Time In";
-  if (updateFields.timeOut) actionText = "Visitor Time Out";
-  if (updateFields.processingStartedTime) actionText = "Processing Started";
-  if (updateFields.officeProcessedTime) actionText = "Visitor Processed";
-
-if (actionText) {
-  await AuditTrail.create({
-    visitorId: visitor._id,
-    visitorName: visitor.name,
-    visitorOffice: visitor.office, // ✅ Add this
-    action: actionText,
-    performedBy: performedByName || "Office Staff", // optionally pass name dynamically
-  });
-}
-} catch (auditErr) {
-  console.error("❌ Audit trail error:", auditErr);
-}
+      if (actionText) {
+        await AuditTrail.create({
+          visitorId: visitor._id,
+          visitorName: visitor.name,
+          visitorOffice: visitor.office,
+          action: actionText,
+          performedBy: performedBy
+        });
+      }
+    } catch (auditErr) {
+      console.error("❌ Audit trail error:", auditErr);
+    }
 
     const appointment = await Appointment.findOne({ contactNumber: visitor.contactNumber });
     if (appointment) {
@@ -157,14 +170,37 @@ if (actionText) {
 /** =========================
  * TIME IN / TIME OUT / PROCESSING / PROCESSED / DELETE
 ========================= */
-router.put("/:id/time-in", (req, res) => updateVisitor(req.params.id, { timeIn: new Date() }, res, "set time in"));
-router.put("/:id/time-out", (req, res) => updateVisitor(req.params.id, { timeOut: new Date() }, res, "set time out"));
-router.put("/:id/start-processing", (req, res) => updateVisitor(req.params.id, { processingStartedTime: new Date() }, res, "start processing"));
-router.put("/:id/office-processed", (req, res) => updateVisitor(req.params.id, { officeProcessedTime: new Date(), processed: true }, res, "mark as processed"));
+router.put("/:id/time-in", (req, res) =>
+  updateVisitor(req.params.id, { timeIn: new Date() }, res, "set time in", req.body.performedBy)
+);
+router.put("/:id/time-out", (req, res) =>
+  updateVisitor(req.params.id, { timeOut: new Date() }, res, "set time out", req.body.performedBy)
+);
+router.put("/:id/start-processing", (req, res) =>
+  updateVisitor(req.params.id, { processingStartedTime: new Date() }, res, "start processing", req.body.performedBy)
+);
+router.put("/:id/office-processed", (req, res) =>
+  updateVisitor(req.params.id, { officeProcessedTime: new Date(), processed: true }, res, "mark as processed", req.body.performedBy)
+);
+
 router.delete("/:id", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndDelete(req.params.id);
     if (!visitor) return res.status(404).json({ error: "Visitor not found" });
+
+    // Audit trail for deletion
+    try {
+      await AuditTrail.create({
+        visitorId: visitor._id,
+        visitorName: visitor.name,
+        visitorOffice: visitor.office,
+        action: "Visitor Deleted",
+        performedBy: "Office Staff"
+      });
+    } catch (auditErr) {
+      console.error("❌ Audit trail error (delete visitor):", auditErr);
+    }
+
     res.json({ message: "Visitor deleted successfully" });
   } catch (err) {
     console.error("❌ Failed to delete visitor:", err);
@@ -196,19 +232,19 @@ router.post("/:id/send-overdue-email", async (req, res) => {
     visitor.overdueEmailSent = true;
     await visitor.save();
 
-    return res.json({ success: true, message: "Email sent successfully" });
+    res.json({ success: true, message: "Email sent successfully" });
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
 
 /** =========================
- * ACCEPT / DECLINE VISITOR (only route that sends email)
+ * ACCEPT / DECLINE VISITOR
 ========================= */
 router.put("/:id/accept-decline", async (req, res) => {
   try {
-    const { accepted } = req.body;
+    const { accepted, performedBy } = req.body;
     if (typeof accepted !== "boolean") return res.status(400).json({ error: "Accepted must be boolean" });
 
     const visitor = await Visitor.findById(req.params.id);
@@ -221,6 +257,19 @@ router.put("/:id/accept-decline", async (req, res) => {
     if (appointment) {
       appointment.accepted = accepted;
       await appointment.save();
+    }
+
+    // Audit trail for accept/decline
+    try {
+      await AuditTrail.create({
+        visitorId: visitor._id,
+        visitorName: visitor.name,
+        visitorOffice: visitor.office,
+        action: accepted ? "Visitor Accepted" : "Visitor Declined",
+        performedBy: performedBy || "Office Staff"
+      });
+    } catch (auditErr) {
+      console.error("❌ Audit trail error (accept/decline):", auditErr);
     }
 
     // Send email only once
@@ -247,7 +296,7 @@ router.put("/:id/accept-decline", async (req, res) => {
 });
 
 /** =========================
- * NOTIFY VISITOR EMAIL (no email sending anymore to prevent duplicate)
+ * NOTIFY VISITOR EMAIL (disabled)
 ========================= */
 router.post("/:id/notify", async (req, res) => {
   try {
