@@ -106,30 +106,31 @@ router.post("/", async (req, res) => {
 /** =========================
  * HELPER: Update Visitor
 ========================= */
-const updateVisitor = async (id, updateFields, res, action) => {
+const updateVisitor = async (id, updateFields, res, action, performedBy = "Office Staff") => {
   try {
     const visitor = await Visitor.findByIdAndUpdate(id, updateFields, { new: true });
     if (!visitor) return res.status(404).json({ error: "Visitor not found" });
 
-// ✅ AUDIT TRAIL LOGGING
+    // ---------------- AUDIT TRAIL ----------------
+// ---------------- AUDIT TRAIL ----------------
 try {
   let actionText = null;
-
   if (updateFields.timeIn) actionText = "Visitor Time In";
   if (updateFields.timeOut) actionText = "Visitor Time Out";
   if (updateFields.processingStartedTime) actionText = "Processing Started";
   if (updateFields.officeProcessedTime) actionText = "Visitor Processed";
 
+  if (actionText) {
 if (actionText) {
   await AuditTrail.create({
     visitorId: visitor._id,
     visitorName: visitor.name,
-    visitorOffice: visitor.office, // ✅ Add this
-    action: actionText,
-    performedBy: performedByName || "Office Staff", // optionally pass name dynamically
+    visitorOffice: visitor.office,
+    action: actionText,  // <-- use actionText, not accepted
+    performedBy: performedBy || "Office Staff",
   });
 }
-
+  }
 } catch (auditErr) {
   console.error("❌ Audit trail error:", auditErr);
 }
@@ -160,8 +161,14 @@ if (actionText) {
 ========================= */
 router.put("/:id/time-in", (req, res) => updateVisitor(req.params.id, { timeIn: new Date() }, res, "set time in"));
 router.put("/:id/time-out", (req, res) => updateVisitor(req.params.id, { timeOut: new Date() }, res, "set time out"));
-router.put("/:id/start-processing", (req, res) => updateVisitor(req.params.id, { processingStartedTime: new Date() }, res, "start processing"));
-router.put("/:id/office-processed", (req, res) => updateVisitor(req.params.id, { officeProcessedTime: new Date(), processed: true }, res, "mark as processed"));
+router.put("/:id/start-processing", (req, res) =>
+  updateVisitor(req.params.id, { processingStartedTime: new Date() }, res, "start processing", req.body.performedBy)
+);
+
+router.put("/:id/office-processed", (req, res) =>
+  updateVisitor(req.params.id, { officeProcessedTime: new Date(), processed: true }, res, "mark as processed", req.body.performedBy)
+);
+
 router.delete("/:id", async (req, res) => {
   try {
     const visitor = await Visitor.findByIdAndDelete(req.params.id);
