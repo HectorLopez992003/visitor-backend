@@ -1,6 +1,6 @@
 import express from "express";
 import AuditTrail from "../models/AuditTrail.js";
-import { verifyJWT } from "../middleware/auth.js";
+import { verifyJWT, requireRole } from "../middleware/auth.js";
 
 const router = express.Router();
 
