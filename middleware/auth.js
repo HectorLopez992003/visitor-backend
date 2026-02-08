@@ -2,9 +2,7 @@ import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 
-/**
- * Middleware to verify JWT token
- */
+// ---------------- VERIFY JWT ----------------
 export function verifyJWT(req, res, next) {
   const authHeader = req.headers["authorization"];
   if (!authHeader) return res.status(401).json({ error: "Missing Authorization header" });
@@ -20,4 +18,15 @@ export function verifyJWT(req, res, next) {
     console.error("❌ Invalid JWT:", err.message);
     return res.status(403).json({ error: "Invalid or expired token" });
   }
+}
+
+// ---------------- REQUIRE ROLE ----------------
+export function requireRole(...allowedRoles) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: "Forbidden: insufficient role" });
+    }
+    next();
+  };
 }
